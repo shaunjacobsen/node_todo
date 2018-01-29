@@ -1,5 +1,8 @@
+require('./config/config.js');
+
 const express = require('express');
 const bodyParser = require('body-parser');
+const _ = require('lodash');
 
 // database/models
 let { ObjectID } = require('mongodb');
@@ -8,8 +11,6 @@ let { Todo } = require('./models/todo');
 let { User } = require('./models/user');
 
 const app = express();
-
-const port = process.env.PORT || 3000;
 
 // body parser middleware
 app.use(bodyParser.json());
@@ -63,6 +64,56 @@ app.get('/todos/:id', (req, res) => {
     });
 });
 
-app.listen(port, () => console.log(`Server up on ${port}`));
+app.patch('/todos/:id', (req, res) => {
+  let id = req.params.id;
+  // the body contains the data we want to update
+  let body = _.pick(req.body, ['text', 'completed']);
+
+  if (!ObjectID.isValid(id)) {
+    return res.status(404).send();
+  }
+
+  if (_.isBoolean(body.completed) && body.completed) {
+    body.completed_at = new Date().getTime();
+  } else {
+    body.completed = false;
+    body.completed_at = null;
+  }
+
+  Todo.findByIdAndUpdate(id, { $set: body }, { new: true })
+    .then((todo) => {
+      if (!todo) {
+        return res.status(404).send();
+      }
+
+      res.send({ todo });
+    })
+    .catch((e) => {
+      res.status(400).send();
+    });
+});
+
+app.delete('/todos/:id', (req, res) => {
+  let id = req.params.id;
+
+  if (!ObjectID.isValid(id)) {
+    return res.status(404).send();
+  }
+
+  Todo.findByIdAndRemove(id)
+    .then((todo) => {
+      if (!todo) {
+        return res.status(404).send();
+      }
+      res.send({ todo });
+    })
+    .catch((e) => {
+      console.log(e);
+    });
+});
+
+app.listen(process.env.PORT, () =>
+  console.log(`Server up on ${process.env.PORT}`)
+);
 
 module.exports = { app };
