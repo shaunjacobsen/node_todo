@@ -4,6 +4,7 @@ const { ObjectID } = require('mongodb');
 
 const { app } = require('./../server');
 const { Todo } = require('./../models/todo');
+const { User } = require('./../models/user');
 
 const testTodos = [
   {
@@ -18,11 +19,23 @@ const testTodos = [
   },
 ];
 
+const testUsers = [
+  {
+    _id: new ObjectID(),
+    email: 'sample@email.com',
+    password: 'testpassword',
+  },
+];
+
 // code to run before every test case
 beforeEach((done) => {
-  Todo.remove({})
+  Todo.remove({}).then(() => {
+    Todo.insertMany(testTodos);
+  });
+
+  User.remove({})
     .then(() => {
-      Todo.insertMany(testTodos);
+      User.insertMany(testUsers);
     })
     .then(() => done());
 });
@@ -210,5 +223,31 @@ describe('PATCH /todos/:id', () => {
           })
           .catch((e) => done(e));
       });
+  });
+});
+
+describe('POST /users', () => {
+  it('Should create a new user', (done) => {
+    let user = {
+      email: 'shaun.d.jacobsen@gmail.com',
+      password: 'testpassword',
+    };
+
+    request(app)
+      .post('/users')
+      .send(user)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.email).toBe(user.email);
+      })
+      .end(done);
+  });
+
+  it('Should return 400 for a user whose email already exists', (done) => {
+    request(app)
+      .post('/users')
+      .send(testUsers[0])
+      .expect(400)
+      .end(done);
   });
 });
