@@ -5,40 +5,11 @@ const { ObjectID } = require('mongodb');
 const { app } = require('./../server');
 const { Todo } = require('./../models/todo');
 const { User } = require('./../models/user');
-
-const testTodos = [
-  {
-    _id: new ObjectID(),
-    text: 'First test todo',
-  },
-  {
-    _id: new ObjectID(),
-    text: 'Second test todo',
-    completed: true,
-    completed_at: 333,
-  },
-];
-
-const testUsers = [
-  {
-    _id: new ObjectID(),
-    email: 'sample@email.com',
-    password: 'testpassword',
-  },
-];
+const { todos, users, populateTodos, populateUsers } = require('./seed/seed');
 
 // code to run before every test case
-beforeEach((done) => {
-  Todo.remove({}).then(() => {
-    Todo.insertMany(testTodos);
-  });
-
-  User.remove({})
-    .then(() => {
-      User.insertMany(testUsers);
-    })
-    .then(() => done());
-});
+beforeEach(populateUsers);
+beforeEach(populateTodos);
 
 describe('POST /todos', () => {
   it('Should create a new todo', (done) => {
@@ -102,10 +73,10 @@ describe('GET /todos', () => {
 describe('GET /todos/:id', () => {
   it('Should return todo doc', (done) => {
     request(app)
-      .get(`/todos/${testTodos[1]._id.toHexString()}`)
+      .get(`/todos/${todos[1]._id.toHexString()}`)
       .expect(200)
       .expect((res) => {
-        expect(res.body.todo.text).toBe(testTodos[1].text);
+        expect(res.body.todo.text).toBe(todos[1].text);
       })
       .end(done);
   });
@@ -128,7 +99,7 @@ describe('GET /todos/:id', () => {
 
 describe('DELETE /todos/:id', () => {
   it('Should remove a todo', (done) => {
-    let hexId = testTodos[0]._id.toHexString();
+    let hexId = todos[0]._id.toHexString();
 
     request(app)
       .delete(`/todos/${hexId}`)
@@ -168,7 +139,7 @@ describe('DELETE /todos/:id', () => {
 
 describe('PATCH /todos/:id', () => {
   it('Should update the todo', (done) => {
-    let id = testTodos[0]._id.toHexString();
+    let id = todos[0]._id.toHexString();
     let body = { text: 'Updated text', completed: true };
 
     request(app)
@@ -197,7 +168,7 @@ describe('PATCH /todos/:id', () => {
   });
 
   it('Should clear completed_at when todo is not completed', (done) => {
-    let id = testTodos[1]._id.toHexString();
+    let id = todos[1]._id.toHexString();
     let body = { text: 'Updated text for todo 2', completed: false };
 
     request(app)
@@ -226,6 +197,30 @@ describe('PATCH /todos/:id', () => {
   });
 });
 
+describe('GET /users/me', () => {
+  it('Should return a user if authenticated', (done) => {
+    request(app)
+      .get('/users/me')
+      .set('x-auth', users[0].tokens[0].token)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body._id).toBe(users[0]._id.toHexString());
+        expect(res.body.email).toBe(users[0].email);
+      })
+      .end(done);
+  });
+
+  it('Should return 401 if not authenticated', (done) => {
+    request(app)
+      .get('/users/me')
+      .expect(401)
+      .expect((res) => {
+        expect(res.body).toEqual({});
+      })
+      .end(done);
+  });
+});
+
 describe('POST /users', () => {
   it('Should create a new user', (done) => {
     let user = {
@@ -238,7 +233,32 @@ describe('POST /users', () => {
       .send(user)
       .expect(200)
       .expect((res) => {
+        expect(res.headers['x-auth']).toExist();
         expect(res.body.email).toBe(user.email);
+        expect(res.body._id).toExist();
+      })
+      .end((err) => {
+        if (err) {
+          return done(err);
+        }
+
+        User.findOne({ email: user.email }).then((selectedUser) => {
+          expect(selectedUser).toExist();
+          expect(selectedUser.password).toNotBe(user.password);
+          done();
+        });
+      });
+  });
+
+  it('Should return validation errors if request is invalid', (done) => {
+    let invalidEmail = 'shaun@me';
+    let shortPassword = '235g';
+    request(app)
+      .post('/users')
+      .send({ email: invalidEmail, password: shortPassword })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body).toInclude({ errors: {} });
       })
       .end(done);
   });
@@ -246,7 +266,7 @@ describe('POST /users', () => {
   it('Should return 400 for a user whose email already exists', (done) => {
     request(app)
       .post('/users')
-      .send(testUsers[0])
+      .send(users[0])
       .expect(400)
       .end(done);
   });
