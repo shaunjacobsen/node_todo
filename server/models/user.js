@@ -58,6 +58,17 @@ UserSchema.methods.generateAuthToken = function() {
   });
 };
 
+UserSchema.methods.removeToken = function(token) {
+  let user = this;
+  return user.update({
+    $pull: {
+      tokens: {
+        token: token,
+      },
+    },
+  });
+};
+
 // statics makes a model method (similar to class method?)
 UserSchema.statics.findByToken = function(token) {
   // uppercase-U "User" because we are using the model as the 'this' binding
